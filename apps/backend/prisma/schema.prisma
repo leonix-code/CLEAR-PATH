@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,15 +10,19 @@ datasource db {
 // ==================== ENUMS ====================
 
 enum UserRole {
+  SUPER_ADMIN
   ADMINISTRATOR
-  STUDENT
+  REGISTRAR
   FINANCE_OFFICER
   LIBRARY_OFFICER
   LABORATORY_OFFICER
   SPORTS_OFFICER
   DEPARTMENT_OFFICER
+  HOSTEL_OFFICER
+  LECTURER
   INVIGILATOR
   ICT_SUPPORT
+  STUDENT
   PARENT
   SUPERVISOR
 }
@@ -88,6 +89,13 @@ enum AuditAction {
   DELETE
   LOGIN
   LOGOUT
+  LOGIN_FAILED
+  PASSWORD_RESET_REQUEST
+  PASSWORD_RESET
+  PASSWORD_CHANGE
+  EMAIL_VERIFY
+  MAGIC_LINK_SENT
+  OAUTH_LOGIN
   APPROVE
   REJECT
   GENERATE
@@ -96,15 +104,27 @@ enum AuditAction {
   EXPORT
   BACKUP
   RESTORE
+  PERMISSION_CHANGE
+  ROLE_CHANGE
+  ACCOUNT_DEACTIVATE
+  ACCOUNT_ACTIVATE
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+  MICROSOFT
+  GITHUB
+  MAGIC_LINK
 }
 
 // ==================== MODELS ====================
 
 model User {
-  id                String          @id @default(uuid())
-  email             String          @unique
+  id                String       @id @default(uuid())
+  email             String       @unique
   phone             String?
-  password          String
+  password          String?
   firstName         String
   lastName          String
   middleName        String?
@@ -113,12 +133,19 @@ model User {
   address           String?
   avatarUrl         String?
   role              UserRole
-  isActive          Boolean         @default(true)
-  isVerified        Boolean         @default(false)
+  authProvider      AuthProvider @default(LOCAL)
+  providerId        String?
+  isActive          Boolean      @default(true)
+  isVerified        Boolean      @default(false)
+  emailVerifiedAt   DateTime?
   lastLoginAt       DateTime?
+  lastLoginIp       String?
   passwordChangedAt DateTime?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  loginCount        Int          @default(0)
+  twoFactorEnabled  Boolean      @default(false)
+  twoFactorSecret   String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
   deletedAt         DateTime?
 
   // Relations
@@ -130,11 +157,130 @@ model User {
   notifications      Notification[]
   sentNotifications  Notification[]    @relation("SentNotifications")
   refreshTokens      RefreshToken[]
+  deviceSessions     DeviceSession[]
+  passwordResets     PasswordReset[]
+  emailVerifications EmailVerification[]
   qrCodes            QRCode[]
   certificates       Certificate[]
+  roleAssignments    RoleAssignment[]  @relation("AssignedByUser")
 
   @@map("users")
 }
+
+model RoleAssignment {
+  id          String   @id @default(uuid())
+  userId      String
+  assignedBy  String
+  role        UserRole
+  reason      String?
+  assignedAt  DateTime @default(now())
+
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedByUser User @relation("AssignedByUser", fields: [assignedBy], references: [id])
+
+  @@map("role_assignments")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  group       String   @default("general")
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  role         UserRole
+  permissionId String
+  granted      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([role, permissionId])
+  @@map("role_permissions")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verifications")
+}
+
+model DeviceSession {
+  id            String   @id @default(uuid())
+  userId        String
+  deviceName    String?
+  deviceType    String?  // mobile, tablet, desktop
+  browser       String?
+  os            String?
+  ipAddress     String?
+  userAgent     String?
+  refreshToken  String   @unique
+  isRemembered  Boolean  @default(false)
+  lastActiveAt  DateTime @default(now())
+  expiresAt     DateTime
+  isRevoked     Boolean  @default(false)
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("device_sessions")
+}
+
+model MagicLink {
+  id        String   @id @default(uuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("magic_links")
+}
+
+model OAuthState {
+  id        String   @id @default(uuid())
+  state     String   @unique
+  provider  AuthProvider
+  redirectUrl String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@map("oauth_states")
+}
+
+// ── Existing models below (unchanged) ──
 
 model Student {
   id            String          @id @default(uuid())
@@ -151,7 +297,6 @@ model Student {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  // Relations
   user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   department        Department          @relation(fields: [departmentId], references: [id])
   course            Course?             @relation(fields: [courseId], references: [id])
@@ -166,7 +311,7 @@ model ParentRelation {
   id        String   @id @default(uuid())
   parentId  String
   studentId String
-  relation  String?  // father, mother, guardian
+  relation  String?
   createdAt DateTime @default(now())
 
   parent  User    @relation("ParentChildren", fields: [parentId], references: [id], onDelete: Cascade)
@@ -186,7 +331,6 @@ model Department {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  // Relations
   head                    User?               @relation("DepartmentHead", fields: [headId], references: [id])
   students                Student[]
   courses                 Course[]
@@ -201,12 +345,11 @@ model Course {
   code         String    @unique
   description  String?
   departmentId String
-  duration     Int       @default(4) // years
+  duration     Int       @default(4)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  // Relations
   department Department @relation(fields: [departmentId], references: [id])
   students   Student[]
 
@@ -215,7 +358,7 @@ model Course {
 
 model AcademicYear {
   id        String   @id @default(uuid())
-  year      String   @unique // e.g., "2024/2025"
+  year      String   @unique
   startDate DateTime
   endDate   DateTime
   isCurrent Boolean  @default(false)
@@ -223,7 +366,6 @@ model AcademicYear {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Relations
   semesters Semester[]
 
   @@map("academic_years")
@@ -243,7 +385,6 @@ model Semester {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  // Relations
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
   clearanceRequests ClearanceRequest[]
 
@@ -262,7 +403,6 @@ model ClearanceRequest {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  // Relations
   student            Student              @relation(fields: [studentId], references: [id], onDelete: Cascade)
   semester           Semester             @relation(fields: [semesterId], references: [id])
   approvals          ClearanceApproval[]
@@ -283,7 +423,6 @@ model ClearanceApproval {
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
 
-  // Relations
   clearanceRequest ClearanceRequest @relation(fields: [clearanceRequestId], references: [id], onDelete: Cascade)
   officer          User             @relation(fields: [officerId], references: [id])
   department       Department?      @relation(fields: [departmentId], references: [id])
@@ -304,7 +443,6 @@ model ExamEligibility {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
-  // Relations
   student          Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   clearanceRequest ClearanceRequest? @relation(fields: [clearanceRequestId], references: [id])
   semester         Semester          @relation(fields: [semesterId], references: [id])
@@ -331,7 +469,6 @@ model Certificate {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  // Relations
   student  User @relation(fields: [studentId], references: [id])
   issuedBy User @relation(fields: [issuedById], references: [id])
 
@@ -343,7 +480,7 @@ model QRCode {
   code        String   @unique
   userId      String
   data        Json?
-  purpose     String   // clearance, exam, certificate, id
+  purpose     String
   expiresAt   DateTime?
   isActive    Boolean  @default(true)
   scannedAt   DateTime?
@@ -351,7 +488,6 @@ model QRCode {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("qr_codes")
@@ -365,7 +501,7 @@ model Notification {
   message         String
   type            NotificationType   @default(IN_APP)
   priority        NotificationPriority @default(NORMAL)
-  referenceType   String?            // clearance, exam, certificate, etc.
+  referenceType   String?
   referenceId     String?
   isRead          Boolean            @default(false)
   readAt          DateTime?
@@ -373,7 +509,6 @@ model Notification {
   deliveredAt     DateTime?
   createdAt       DateTime           @default(now())
 
-  // Relations
   user   User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   sender User? @relation("SentNotifications", fields: [sentById], references: [id])
 
@@ -384,12 +519,12 @@ model RefreshToken {
   id        String   @id @default(uuid())
   token     String   @unique
   userId    String
+  deviceSessionId String?
   expiresAt DateTime
   isRevoked Boolean  @default(false)
   createdAt DateTime @default(now())
   revokedAt DateTime?
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
@@ -408,9 +543,12 @@ model AuditLog {
   metadata   Json?
   createdAt  DateTime    @default(now())
 
-  // Relations
   user User? @relation(fields: [userId], references: [id])
 
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
+  @@index([createdAt])
   @@map("audit_logs")
 }
 
@@ -419,12 +557,11 @@ model StudentHistory {
   studentId     String
   academicYearId String?
   semesterId    String?
-  action        String   // enrolled, graduated, suspended, withdrawn, completed
+  action        String
   description   String?
   performedById String?
   createdAt     DateTime @default(now())
 
-  // Relations
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@map("student_histories")
@@ -435,7 +572,7 @@ model SystemSetting {
   key       String   @unique
   value     String
   group     String   @default("general")
-  type      String   @default("string") // string, number, boolean, json
+  type      String   @default("string")
   isPublic  Boolean  @default(false)
   description String?
   createdAt DateTime @default(now())
@@ -449,8 +586,8 @@ model BackupLog {
   fileName   String
   fileSize   Int?
   fileUrl    String?
-  status     String   // successful, failed
-  type       String   // manual, automatic
+  status     String
+  type       String
   notes      String?
   createdById String?
   createdAt  DateTime @default(now())

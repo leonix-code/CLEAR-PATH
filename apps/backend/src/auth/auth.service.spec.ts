@@ -194,4 +194,76 @@ describe('AuthService', () => {
 
     it('should return null for deactivated user', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...mockUser, isActive: false });
-      
+      const result = await authService.validateUser('u1');
+      expect(result).toBeNull();
+    });
+  });
+
+  // Forgot Password
+  describe('forgotPassword', () => {
+    it('should send reset token for existing user', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      const result = await authService.forgotPassword('test@test.com');
+      expect(result.message).toContain('reset link');
+      expect(result.resetToken).toBeDefined();
+    });
+
+    it('should return same message for non-existent user (security)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      const result = await authService.forgotPassword('no@test.com');
+      expect(result.message).toContain('reset link');
+      expect(result.resetToken).toBeUndefined();
+    });
+  });
+
+  // Reset Password
+  describe('resetPassword', () => {
+    it('should reset password with valid token', async () => {
+      const mockReset = {
+        id: 'reset-1',
+        userId: 'user-1',
+        token: 'valid-token',
+        expiresAt: new Date(Date.now() + 3600000),
+        usedAt: null,
+      };
+      prisma.passwordReset.findUnique.mockResolvedValue(mockReset);
+      jest.spyOn(bcrypt, 'hash').mockResolvedValue('new-hash' as never);
+
+      const result = await authService.resetPassword('valid-token', 'NewPw123!');
+      expect(result.message).toBe('Password reset successfully');
+    });
+
+    it('should throw for expired token', async () => {
+      prisma.passwordReset.findUnique.mockResolvedValue({
+        id: 'r1', userId: 'u1', token: 'expired', expiresAt: new Date(Date.now() - 1000), usedAt: null,
+      });
+      await expect(authService.resetPassword('expired', 'new')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // OAuth
+  describe('handleOAuthLogin', () => {
+    it('should create new user on first OAuth login', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockUser);
+      prisma.refreshToken.create.mockResolvedValue({ token: 'rt' });
+
+      const result = await authService.handleOAuthLogin('google', {
+        email: 'oauth@test.com', firstName: 'O', lastName: 'Auth', id: 'google-1',
+      });
+      expect(result.accessToken).toBeDefined();
+      expect(prisma.user.create).toHaveBeenCalled();
+    });
+
+    it('should login existing OAuth user', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, authProvider: 'GOOGLE', oauthId: 'google-1' });
+      prisma.refreshToken.create.mockResolvedValue({ token: 'rt' });
+
+      const result = await authService.handleOAuthLogin('google', {
+        email: 'test@test.com', firstName: 'T', lastName: 'U', id: 'google-1',
+      });
+      expect(result.accessToken).toBeDefined();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+  });
+});
