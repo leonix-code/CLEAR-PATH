@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w apps/backend
+
+      - name: Lint backend
+        run: npm run lint -w apps/backend -- --no-fix
+
+      - name: Lint frontend
+        run: npm run lint -w apps/frontend
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w apps/backend
+
+      - name: Build shared package
+        run: npm run build -w packages/shared
+
+      - name: Build backend
+        run: npm run build -w apps/backend
+
+      - name: Build frontend
+        run: npm run build -w apps/frontend
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clearpath
+          POSTGRES_PASSWORD: clearpath_secret_2024
+          POSTGRES_DB: clearpath_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready -U clearpath
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate -w apps/backend
+
+      - name: Build shared package
+        run: npm run build -w packages/shared
+
+      - name: Run backend unit tests
+        run: npm run test -w apps/backend
+        env:
+          DATABASE_URL: postgresql://clearpath:clearpath_secret_2024@localhost:5432/clearpath_db
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_PASSWORD: clearpath_redis_2024
+          JWT_SECRET: test_jwt_secret
+          JWT_REFRESH_SECRET: test_jwt_refresh_secret
+          NODE_ENV: test

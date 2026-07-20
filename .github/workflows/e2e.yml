@@ -1,0 +1,96 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  COMPOSE_FILE: docker/docker-compose.yml
+
+jobs:
+  playwright:
+    name: Playwright ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox]
+        include:
+          - project: Mobile Chrome
+            browser: chromium
+          - project: Mobile Safari
+            browser: webkit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build -w packages/shared
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps ${{ matrix.browser || matrix.project }}
+
+      - name: Build Docker images
+        run: docker compose -f ${{ env.COMPOSE_FILE }} build
+        env:
+          DOCKER_BUILDKIT: '1'
+
+      - name: Start Docker services
+        run: docker compose -f ${{ env.COMPOSE_FILE }} up -d --wait --wait-timeout 120
+
+      - name: Wait for health endpoints
+        run: |
+          echo "Waiting for backend health..."
+          timeout 60 bash -c 'until curl -sf http://localhost:4000/health; do sleep 2; done'
+          echo "Backend healthy"
+          echo "Waiting for frontend health..."
+          timeout 60 bash -c 'until curl -sf http://localhost:3000/api/health; do sleep 2; done'
+          echo "Frontend healthy"
+          echo "Waiting for Caddy proxy..."
+          timeout 60 bash -c 'until curl -sf http://localhost:8080/health; do sleep 2; done'
+          echo "Caddy healthy"
+
+      - name: Run Playwright tests ${{ matrix.project }}
+        run: npx playwright test --project="${{ matrix.project }}"
+        env:
+          BASE_URL: http://localhost:8080
+          CI: 'true'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.project }}
+          path: test-results/
+          retention-days: 7
+
+      - name: Dump Docker logs on failure
+        if: failure()
+        run: docker compose -f ${{ env.COMPOSE_FILE }} logs --tail=100
+
+      - name: Cleanup Docker services
+        if: always()
+        run: docker compose -f ${{ env.COMPOSE_FILE }} down -v --remove-orphans

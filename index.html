@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearPath — Student Clearance System</title>
+  <meta
+    name="description"
+    content="Digital Student Clearance and Exam Eligibility Verification System"
+  />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>" />
+
+  <script>
+    (function () {
+      var stored = localStorage.getItem("clearpath-theme");
+      var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (stored === "dark" || (!stored && prefersDark)) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
+
+  <style>
+    /* ── Reset & Base ── */
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ── Light theme (default) ── */
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --primary-light: #a78bfa;
+      --secondary: #06b6d4;
+      --accent: #8b5cf6;
+      --bg: #f0f4ff;
+      --surface: rgba(255, 255, 255, 0.7);
+      --surface-border: rgba(255, 255, 255, 0.3);
+      --surface-hover: rgba(255, 255, 255, 0.85);
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+      --glass-hover-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.2);
+      --header-bg: rgba(240, 244, 255, 0.75);
+      --header-border: rgba(255, 255, 255, 0.3);
+      --footer-border: rgba(255, 255, 255, 0.3);
+      --radius: 1rem;
+      --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --theme-transition: 0.4s ease;
+      --orb-opacity-1: 0.15;
+      --orb-opacity-2: 0.07;
+    }
+
+    /* ── Dark theme ── */
+    .dark {
+      --bg: #0f172a;
+      --surface: rgba(30, 41, 59, 0.7);
+      --surface-border: rgba(100, 116, 139, 0.3);
+      --surface-hover: rgba(30, 41, 59, 0.85);
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+      --glass-hover-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
+      --header-bg: rgba(15, 23, 42, 0.85);
+      --header-border: rgba(100, 116, 139, 0.2);
+      --footer-border: rgba(100, 116, 139, 0.2);
+      --orb-opacity-1: 0.08;
+      --orb-opacity-2: 0.04;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+      transition: background var(--theme-transition), color var(--theme-transition);
+    }
+
+    /* ── Background Decorations ── */
+    .bg-decoration {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .bg-decoration .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      transition: opacity var(--theme-transition);
+    }
+    .bg-decoration .orb:nth-child(1) {
+      width: 500px;
+      height: 500px;
+      top: -150px;
+      right: -100px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      opacity: var(--orb-opacity-1);
+    }
+    .bg-decoration .orb:nth-child(2) {
+      width: 400px;
+      height: 400px;
+      bottom: -120px;
+      left: -80px;
+      background: linear-gradient(135deg, #06b6d4, #3b82f6);
+      opacity: var(--orb-opacity-1);
+    }
+    .bg-decoration .orb:nth-child(3) {
+      width: 600px;
+      height: 600px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: linear-gradient(135deg, #6366f1, #a78bfa);
+      opacity: var(--orb-opacity-2);
+    }
+
+    /* ── Glass Card ── */
+    .glass {
+      background: var(--surface);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius);
+      box-shadow: var(--glass-shadow);
+      transition: transform var(--transition), box-shadow var(--transition),
+        background var(--theme-transition), border-color var(--theme-transition);
+    }
+    .glass:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--glass-hover-shadow);
+    }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--header-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--header-border);
+      transition: background var(--theme-transition),
+        border-color var(--theme-transition);
+    }
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      transition: color var(--theme-transition);
+    }
+    .logo-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+      color: #fff;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+    .logo span {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    nav a {
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: color var(--transition), background var(--transition);
+    }
+    nav a:hover {
+      color: var(--primary);
+      background: rgba(99, 102, 241, 0.08);
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 24px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: #fff !important;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity var(--transition), transform var(--transition);
+    }
+    .btn-primary:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      filter: brightness(1.1);
+    }
+
+    /* ── Theme Toggle ── */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.15rem;
+      transition: all var(--transition),
+        background var(--theme-transition),
+        border-color var(--theme-transition);
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .theme-toggle:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+    .theme-toggle:active {
+      transform: translateY(0) scale(0.95);
+    }
+    .theme-toggle .icon-sun,
+    .theme-toggle .icon-moon {
+      position: absolute;
+      transition: transform 0.4s ease, opacity 0.4s ease;
+    }
+    .theme-toggle .icon-sun {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    .theme-toggle .icon-moon {
+      transform: translateY(20px) rotate(-90deg);
+      opacity: 0;
+    }
+    .dark .theme-toggle .icon-sun {
+      transform: translateY(-20px) rotate(90deg);
+      opacity: 0;
+    }
+    .dark .theme-toggle .icon-moon {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a78bfa 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      max-width: 640px;
+      margin: 0 auto 36px;
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      transition: color var(--theme-transition);
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 12px;
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      color: var(--text);
+      font-weight: 600;
+      text-decoration: none;
+      backdrop-filter: blur(12px);
+      transition: all var(--transition),
+        background var(--theme-transition),
+        border-color var(--theme-transition),
+        color var(--theme-transition);
+    }
+    .btn-secondary:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: translateY(-1px);
+    }
+
+    /* ── Sections ── */
+    section {
+      padding: 60px 0;
+    }
+    section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    section .subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      max-width: 560px;
+      margin: 0 auto 48px;
+      font-size: 1.05rem;
+      transition: color var(--theme-transition);
+    }
+
+    /* ── Features / Cards Grid ── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      padding: 32px 28px;
+      text-align: left;
+    }
+    .feature-card .icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      margin-bottom: 20px;
+      font-size: 1.4rem;
+    }
+    .feature-card h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .feature-card p {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      transition: color var(--theme-transition);
+    }
+
+    /* ── Roles ── */
+    .roles-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+    }
+    .role-card {
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .role-card .emoji {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+    .role-card h4 {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+    .role-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      transition: color var(--theme-transition);
+    }
+
+    /* ── Quick Links ── */
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+    .link-card {
+      padding: 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      text-decoration: none;
+      color: var(--text);
+    }
+    .link-card .link-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12));
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+    .link-card .link-info h4 {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .link-card .link-info p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+      transition: color var(--theme-transition);
+    }
+    .link-card .arrow {
+      margin-left: auto;
+      font-size: 1.2rem;
+      color: var(--text-muted);
+      transition: transform var(--transition), color var(--transition),
+        color var(--theme-transition);
+    }
+    .link-card:hover .arrow {
+      transform: translateX(4px);
+      color: var(--primary);
+    }
+
+    /* ── Footer ── */
+    footer {
+      padding: 32px 0;
+      text-align: center;
+      border-top: 1px solid var(--footer-border);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      transition: border-color var(--theme-transition),
+        color var(--theme-transition);
+    }
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+
+    /* ── Animations ── */
+    .animate-in {
+      opacity: 0;
+      transform: translateY(24px);
+      animation: fadeUp 0.7s ease forwards;
+    }
+    .animate-in:nth-child(2) {
+      animation-delay: 0.1s;
+    }
+    .animate-in:nth-child(3) {
+      animation-delay: 0.2s;
+    }
+    @keyframes fadeUp {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── Theme toggle entrance ── */
+    @keyframes togglePop {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      60% {
+        transform: scale(1.15);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    .theme-toggle {
+      animation: togglePop 0.5s ease 0.3s backwards;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      header .container {
+        flex-direction: column;
+        gap: 12px;
+      }
+      nav a {
+        font-size: 0.82rem;
+        padding: 6px 12px;
+      }
+      .hero {
+        padding: 48px 0 36px;
+      }
+      .hero-actions {
+        flex-direction: column;
+      }
+      .btn-secondary,
+      .btn-primary {
+        width: 100%;
+        justify-content: center;
+      }
+      .features-grid,
+      .roles-grid,
+      .links-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 480px) {
+      nav {
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Background Orbs -->
+  <div class="bg-decoration">
+    <div class="orb"></div>
+    <div class="orb"></div>
+    <div class="orb"></div>
+  </div>
+
+  <!-- ──── Header ──── -->
+  <header>
+    <div class="container">
+      <a href="/" class="logo">
+        <div class="logo-icon">🎓</div>
+        <span>ClearPath</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#roles">Roles</a>
+        <a href="#links">Quick Links</a>
+        <button
+          class="theme-toggle"
+          id="themeToggle"
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+        >
+          <span class="icon-sun">☀️</span>
+          <span class="icon-moon">🌙</span>
+        </button>
+        <a href="http://localhost:3000" class="btn-primary">
+          Launch App &rarr;
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ──── Hero ──── -->
+  <section class="hero">
+    <div class="container">
+      <h1 class="animate-in">
+        Digital Student <br /><span class="gradient">Clearance System</span>
+      </h1>
+      <p class="animate-in">
+        ClearPath is a comprehensive digital platform for managing student
+        clearance, exam eligibility verification, and academic workflow
+        automation.
+      </p>
+      <div class="hero-actions animate-in">
+        <a href="http://localhost:3000" class="btn-primary">
+          &#9654; Go to App
+        </a>
+        <a href="http://localhost:4000/api/docs" class="btn-secondary">
+          &#128214; API Documentation
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── Features ──── -->
+  <section id="features">
+    <div class="container">
+      <h2>Key Features</h2>
+      <p class="subtitle">
+        Everything you need to manage student clearance and exam eligibility
+        in one place.
+      </p>
+      <div class="features-grid">
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15));">&#9989;</div>
+          <h3>Clearance Workflow</h3>
+          <p>
+            End-to-end digital clearance with multi-step approvals across
+            departments, libraries, labs, and sports offices.
+          </p>
+        </div>
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(59,130,246,0.15));">&#128221;</div>
+          <h3>Exam Eligibility</h3>
+          <p>
+            Automated eligibility verification ensures only cleared students
+            can access exam halls and generate admission cards.
+          </p>
+        </div>
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(22,163,74,0.15));">&#128196;</div>
+          <h3>Digital Certificates</h3>
+          <p>
+            Generate signed PDF clearance certificates with QR codes for
+            instant verification by authorized parties.
+          </p>
+        </div>
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(217,119,6,0.15));">&#128202;</div>
+          <h3>Analytics &amp; Reports</h3>
+          <p>
+            Real-time dashboards with clearance statistics, trends, and
+            exportable reports for administrators.
+          </p>
+        </div>
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(220,38,38,0.15));">&#128276;</div>
+          <h3>Notifications</h3>
+          <p>
+            Multi-channel notifications (email, in-app) keep students and
+            officers informed of clearance status changes.
+          </p>
+        </div>
+        <div class="feature-card glass">
+          <div class="icon" style="background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(192,132,252,0.15));">&#128274;</div>
+          <h3>Role-Based Access</h3>
+          <p>
+            Granular permissions for students, officers, invigilators, and
+            administrators with secure JWT authentication.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── Roles ──── -->
+  <section id="roles" style="padding-top: 20px;">
+    <div class="container">
+      <h2>System Roles</h2>
+      <p class="subtitle">
+        ClearPath serves all stakeholders in the academic clearance ecosystem.
+      </p>
+      <div class="roles-grid">
+        <div class="role-card glass">
+          <span class="emoji">&#127891;</span>
+          <h4>Student</h4>
+          <p>Apply for clearance, track status, download certificates</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#128188;</span>
+          <h4>Finance Officer</h4>
+          <p>Verify fee clearance and financial obligations</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#128218;</span>
+          <h4>Library Officer</h4>
+          <p>Clear library book returns and fines</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#128300;</span>
+          <h4>Lab Officer</h4>
+          <p>Verify lab equipment and material returns</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#9917;</span>
+          <h4>Sports Officer</h4>
+          <p>Clear sports equipment and dues</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#128736;</span>
+          <h4>Invigilator</h4>
+          <p>Verify student eligibility at exam halls</p>
+        </div>
+        <div class="role-card glass">
+          <span class="emoji">&#128373;</span>
+          <h4>Admin</h4>
+          <p>Manage users, settings, and system configuration</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── Quick Links ──── -->
+  <section id="links" style="padding-top: 20px;">
+    <div class="container">
+      <h2>Quick Links</h2>
+      <p class="subtitle">
+        Access the ClearPath application and developer resources.
+      </p>
+      <div class="links-grid">
+        <a href="http://localhost:3000" class="link-card glass">
+          <div class="link-icon">&#127760;</div>
+          <div class="link-info">
+            <h4>Frontend App</h4>
+            <p>Next.js application &mdash; localhost:3000</p>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+        <a href="http://localhost:4000/api/docs" class="link-card glass">
+          <div class="link-icon">&#128214;</div>
+          <div class="link-info">
+            <h4>API Documentation</h4>
+            <p>Swagger UI &mdash; localhost:4000/api/docs</p>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+        <a href="http://localhost:4000/health" class="link-card glass">
+          <div class="link-icon">&#10084;&#65039;</div>
+          <div class="link-info">
+            <h4>Health Check</h4>
+            <p>Backend health endpoint</p>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+        <a href="https://github.com" target="_blank" rel="noopener" class="link-card glass">
+          <div class="link-icon">&#128194;</div>
+          <div class="link-info">
+            <h4>Source Code</h4>
+            <p>Monorepo &mdash; NestJS + Next.js + PostgreSQL</p>
+          </div>
+          <span class="arrow">&rarr;</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──── Footer ──── -->
+  <footer>
+    <div class="container">
+      <p>
+        &copy; 2026 <a href="/">ClearPath</a> &mdash;
+        Digital Student Clearance and Exam Eligibility Verification System
+      </p>
+      <p style="margin-top: 4px; font-size: 0.78rem;">
+        Built with NestJS, Next.js, PostgreSQL &amp; Redis
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      // ── Get references ──
+      const toggle = document.getElementById("themeToggle");
+
+      // ── Determine initial theme ──
+      // 1. Check localStorage
+      // 2. Fall back to system preference
+      // 3. Final fallback: light
+      const stored = localStorage.getItem("clearpath-theme");
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = stored || (prefersDark ? "dark" : "light");
+
+      // Apply the theme immediately (before paint, if possible)
+      if (theme === "dark") {
+        document.documentElement.classList.add("dark");
+      }
+
+      // ── Toggle handler ──
+      toggle.addEventListener("click", function () {
+        const isDark = document.documentElement.classList.toggle("dark");
+        localStorage.setItem("clearpath-theme", isDark ? "dark" : "light");
+
+        // Haptic feedback via the button animation
+        toggle.style.transform = "scale(0.85)";
+        setTimeout(() => {
+          toggle.style.transform = "";
+        }, 150);
+      });
+
+      // ── Listen for system preference changes ──
+      window
+        .matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", function (e) {
+          // Only follow system if user hasn't explicitly chosen
+          if (!localStorage.getItem("clearpath-theme")) {
+            if (e.matches) {
+              document.documentElement.classList.add("dark");
+            } else {
+              document.documentElement.classList.remove("dark");
+            }
+          }
+        });
+    })();
+  </script>
+</body>
+</html>

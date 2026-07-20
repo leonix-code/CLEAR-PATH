@@ -1,0 +1,54 @@
+# ClearPath Reverse Proxy — Docker Caddyfile
+#
+# This Caddyfile runs inside a Docker container and proxies to other
+# Docker services by their compose service names:
+#   /           → index.html (landing page, served by Caddy itself)
+#   /api/*      → backend service at port 4000
+#   /*          → frontend service at port 3000
+
+:8080 {
+  # ── Root directory inside the container ──
+  root * /usr/share/caddy
+
+  # ── Global settings ──
+  encode gzip
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # ── Backend API proxy ──
+  handle /api/* {
+    reverse_proxy backend:4000 {
+      header_up Host {host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # ── Health check ──
+  handle /health* {
+    reverse_proxy backend:4000
+  }
+
+  # ── Static files & landing page ──
+  @static file {
+    try_files {path} {path}/
+  }
+  handle @static {
+    file_server
+  }
+
+  # ── Everything else → Next.js frontend ──
+  handle {
+    reverse_proxy frontend:3000 {
+      header_up Host {host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+}

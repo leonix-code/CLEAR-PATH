@@ -1,0 +1,62 @@
+# ClearPath Reverse Proxy — Caddyfile
+#
+# Usage:
+#   caddy run
+#
+# This serves:
+#   /           → index.html (landing page)
+#   /api/*      → NestJS backend  (localhost:4000)
+#   /*          → Next.js frontend (localhost:3000)
+#
+# Requires Caddy v2+: https://caddyserver.com/download
+
+:8080 {
+  # ── Root directory (project root) ──
+  root * .
+
+  # ── Global settings ──
+  encode gzip
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    X-XSS-Protection "1; mode=block"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+
+  # ── Backend API proxy ──
+  # NOTE: use "handle" (not "handle_path") — the backend registers routes
+  # at /api/v1/... (global prefix), so the full path must be preserved.
+  handle /api/* {
+    reverse_proxy localhost:4000 {
+      header_up Host {host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+
+  # ── Health check ──
+  handle /health* {
+    reverse_proxy localhost:4000
+  }
+
+  # ── Static files & landing page ──
+  # Serve only actual files (index.html, favicon, etc.).
+  # Unknown paths fall through to the frontend proxy below.
+  @static file {
+    try_files {path} {path}/
+  }
+  handle @static {
+    file_server
+  }
+
+  # ── Everything else → Next.js frontend ──
+  handle {
+    reverse_proxy localhost:3000 {
+      header_up Host {host}
+      header_up X-Real-IP {remote_host}
+      header_up X-Forwarded-For {remote_host}
+      header_up X-Forwarded-Proto {scheme}
+    }
+  }
+}

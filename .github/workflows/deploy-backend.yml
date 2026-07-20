@@ -1,0 +1,41 @@
+name: Deploy Backend to Railway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'packages/shared/**'
+      - 'docker/backend/**'
+      - 'docker/docker-compose.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy NestJS Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/railwayapp/cli:latest
+      options: --user root
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        run: railway up --service=clearpath-backend
+
+      - name: Run database migrations
+        run: |
+          railway run --service=clearpath-backend "npm run db:migrate:prod -w apps/backend"
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment triggered successfully."
+          railway status --service=clearpath-backend
