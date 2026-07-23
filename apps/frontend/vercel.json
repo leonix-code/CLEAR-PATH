@@ -1,0 +1,5 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && npm run build -w packages/shared && npm run build -w apps/frontend",
+  "installCommand": "cd ../.. && npm ci"
+}
