@@ -1,0 +1,100 @@
+// =====================================================================
+// SCHEMA CHANGES  (apply into apps/backend/prisma/schema.prisma)
+// =====================================================================
+
+// --- RefreshToken: store HASH not raw token; add family for reuse detection (C5) ---
+// REPLACE the existing model with:
+model RefreshToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique          // was: token (raw). Now sha256(token).
+  familyId   String                     // rotation family
+  userId     String
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  isRevoked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+// --- NEW: real password reset (C2) ---
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("password_resets")
+}
+
+// --- NEW: email verification ---
+model EmailVerification {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+// --- NEW: configurable clearance workflow (H1) ---
+model WorkflowDefinition {
+  id           String         @id @default(uuid())
+  name         String
+  courseId     String?
+  minLevel     Int?
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  steps        WorkflowStep[]
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id            String             @id @default(uuid())
+  definitionId  String
+  requiredRole  UserRole
+  departmentId  String?
+  order         Int                @default(0)
+  mode          String             @default("parallel") // parallel | sequential
+  isMandatory   Boolean            @default(true)
+  definition    WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  @@index([definitionId])
+  @@map("workflow_steps")
+}
+
+// --- ClearanceApproval: step-scoped instead of officer-scoped (H1) ---
+// Add: requiredRole, order; make officerId nullable (filled when acted on);
+// drop @@unique([clearanceRequestId, officerId]).
+//   requiredRole UserRole
+//   order        Int      @default(0)
+//   officerId    String?
+//   @@index([clearanceRequestId])
+//   @@index([requiredRole, status])
+
+// --- Certificate: relate to Student, not User (M3) ---
+//   student   Student @relation(fields: [studentId], references: [id])
+
+// =====================================================================
+// INDEXES TO ADD (H6) — Postgres does NOT auto-index foreign keys
+// =====================================================================
+// model Student            @@index([departmentId]) @@index([courseId])
+// model Course             @@index([departmentId])
+// model Semester           @@index([academicYearId])
+// model ClearanceRequest   @@index([semesterId]) @@index([status]) @@index([studentId, status])
+// model ClearanceApproval  @@index([officerId]) @@index([departmentId]) @@index([status])
+// model ExamEligibility    @@index([semesterId]) @@index([verifiedById]) @@index([status])
+// model Certificate        @@index([studentId]) @@index([issuedById])
+// model QRCode             @@index([userId]) @@index([purpose])
+// model Notification       @@index([userId, isRead]) @@index([createdAt])
+// model AuditLog           @@index([userId]) @@index([entity, entityId]) @@index([createdAt])
+// model StudentHistory     @@index([studentId])

@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/leonix-code/CLEAR-PATH",
+  "base_branch": "main",
+  "status": "PR-ready bundle, not pushed",
+  "critical_changes": [
+    "public registration role escalation removed",
+    "password reset and email verification persisted",
+    "refresh token hashing and family reuse detection",
+    "step-scoped clearance workflow",
+    "tenant model and query scoping",
+    "frontend submodule replacement",
+    "secrets externalized",
+    "signed QR verification"
+  ],
+  "validation_required": "docs/RELEASE_GATE.md"
+}

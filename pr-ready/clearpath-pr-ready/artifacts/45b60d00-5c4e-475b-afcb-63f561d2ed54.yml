@@ -1,0 +1,58 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    name: Backend (lint, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clearpath
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: clearpath_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://clearpath:postgres@localhost:5432/clearpath_test
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      JWT_SECRET: ci_only_not_a_real_secret
+      JWT_REFRESH_SECRET: ci_only_not_a_real_secret_2
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run db:generate -w apps/backend
+      - run: npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma
+      - run: npm run build -w packages/shared
+      - run: npm run lint -w apps/backend -- --no-fix
+      - run: npm run build -w apps/backend
+      - run: npm run test -w apps/backend
+      - run: npm audit --omit=dev --audit-level=high || true
+  frontend:
+    name: Frontend (gated until rebuilt)
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('apps/frontend/package.json') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run lint -w apps/frontend
+      - run: npm run build -w apps/frontend

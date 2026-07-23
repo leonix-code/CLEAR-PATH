@@ -1,0 +1,480 @@
+// CLEAR-PATH — corrected schema (multi-tenant, indexed, secure auth tables).
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+// ==================== ENUMS ====================
+enum UserRole {
+  SUPER_ADMIN
+  UNIVERSITY_ADMIN
+  REGISTRAR
+  ADMINISTRATOR
+  STUDENT
+  FINANCE_OFFICER
+  LIBRARY_OFFICER
+  LABORATORY_OFFICER
+  SPORTS_OFFICER
+  HOSTEL_OFFICER
+  DEPARTMENT_OFFICER
+  DEPARTMENT_HEAD
+  INVIGILATOR
+  ICT_SUPPORT
+  AUDITOR
+  PARENT
+  SUPERVISOR
+}
+enum ClearanceStatus { PENDING IN_PROGRESS APPROVED REJECTED CONDITIONALLY_APPROVED }
+enum ApprovalStatus { PENDING APPROVED REJECTED CONDITIONAL }
+enum StepMode { PARALLEL SEQUENTIAL }
+enum NotificationType { EMAIL SMS PUSH IN_APP }
+enum NotificationPriority { LOW NORMAL HIGH URGENT }
+enum ExamEligibilityStatus { ELIGIBLE NOT_ELIGIBLE PENDING_REVIEW CONDITIONAL }
+enum Gender { MALE FEMALE OTHER }
+enum SemesterType { FIRST SECOND SUMMER }
+enum CertificateType { CLEARANCE GOOD_STANDING COMPLETION TRANSFER }
+enum AuditAction { CREATE READ UPDATE DELETE LOGIN LOGOUT APPROVE REJECT GENERATE DOWNLOAD VERIFY EXPORT BACKUP RESTORE }
+
+// ==================== TENANCY ====================
+model Institution {
+  id            String   @id @default(uuid())
+  name          String
+  code          String   @unique
+  domain        String?  @unique
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  users         User[]
+  departments   Department[]
+  courses       Course[]
+  academicYears AcademicYear[]
+  workflows     WorkflowDefinition[]
+  @@map("institutions")
+}
+
+// ==================== CORE ====================
+model User {
+  id                String    @id @default(uuid())
+  institutionId     String?
+  email             String    @unique
+  phone             String?
+  password          String
+  firstName         String
+  lastName          String
+  middleName        String?
+  gender            Gender?
+  dateOfBirth       DateTime?
+  address           String?
+  avatarUrl         String?
+  role              UserRole
+  isActive          Boolean   @default(true)
+  isVerified        Boolean   @default(false)
+  mfaEnabled        Boolean   @default(false)
+  mfaSecret         String?
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  passwordChangedAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  institution       Institution? @relation(fields: [institutionId], references: [id])
+  student           Student?
+  parentRelation    ParentRelation?  @relation("StudentParents")
+  children          ParentRelation[] @relation("ParentChildren")
+  clearanceApprovals ClearanceApproval[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  sentNotifications Notification[] @relation("SentNotifications")
+  refreshTokens     RefreshToken[]
+  passwordResets    PasswordReset[]
+  emailVerifications EmailVerification[]
+  qrCodes           QRCode[]
+  issuedCertificates Certificate[] @relation("IssuedCertificates")
+  examVerifications ExamEligibility[] @relation("ExamVerifier")
+  headedDepartments Department[] @relation("DepartmentHead")
+
+  @@index([institutionId])
+  @@index([role])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model Student {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  studentId    String   @unique
+  departmentId String
+  courseId     String?
+  currentLevel Int      @default(100)
+  yearOfEntry  Int?
+  session      String?
+  cgpa         Decimal? @db.Decimal(4, 2)
+  totalCredits Int?     @default(0)
+  isEnrolled   Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department   Department @relation(fields: [departmentId], references: [id])
+  course       Course?    @relation(fields: [courseId], references: [id])
+  clearanceRequests ClearanceRequest[]
+  examEligibilities ExamEligibility[]
+  studentHistories StudentHistory[]
+  certificates Certificate[]
+
+  @@index([departmentId])
+  @@index([courseId])
+  @@map("students")
+}
+
+model ParentRelation {
+  id         String   @id @default(uuid())
+  parentId   String
+  studentId  String
+  userId     String?  @unique
+  relation   String?
+  createdAt  DateTime @default(now())
+  parent     User     @relation("ParentChildren", fields: [parentId], references: [id], onDelete: Cascade)
+  linkedUser User?    @relation("StudentParents", fields: [userId], references: [id])
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  @@unique([parentId, studentId])
+  @@index([studentId])
+  @@map("parent_relations")
+}
+
+model Department {
+  id            String   @id @default(uuid())
+  institutionId String?
+  name          String
+  code          String
+  description   String?
+  headId        String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  head          User?    @relation("DepartmentHead", fields: [headId], references: [id])
+  students      Student[]
+  courses       Course[]
+  clearanceApprovals ClearanceApproval[]
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("departments")
+}
+
+model Course {
+  id            String   @id @default(uuid())
+  institutionId String?
+  name          String
+  code          String
+  description   String?
+  departmentId  String
+  duration      Int      @default(4)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  department    Department @relation(fields: [departmentId], references: [id])
+  students      Student[]
+  @@unique([institutionId, code])
+  @@index([departmentId])
+  @@map("courses")
+}
+
+model AcademicYear {
+  id            String   @id @default(uuid())
+  institutionId String?
+  year          String
+  startDate     DateTime
+  endDate       DateTime
+  isCurrent     Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  semesters     Semester[]
+  @@unique([institutionId, year])
+  @@index([institutionId])
+  @@map("academic_years")
+}
+
+model Semester {
+  id                   String   @id @default(uuid())
+  academicYearId       String
+  semesterType         SemesterType
+  name                 String
+  startDate            DateTime
+  endDate              DateTime
+  registrationDeadline DateTime?
+  clearanceDeadline    DateTime?
+  isCurrent            Boolean  @default(false)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  academicYear         AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  clearanceRequests    ClearanceRequest[]
+  examEligibilities    ExamEligibility[]
+  @@unique([academicYearId, semesterType])
+  @@index([academicYearId])
+  @@map("semesters")
+}
+
+// ==================== WORKFLOW ENGINE ====================
+model WorkflowDefinition {
+  id            String   @id @default(uuid())
+  institutionId String?
+  name          String
+  courseId      String?
+  minLevel      Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  steps         WorkflowStep[]
+  @@index([institutionId])
+  @@map("workflow_definitions")
+}
+
+model WorkflowStep {
+  id           String   @id @default(uuid())
+  definitionId String
+  requiredRole UserRole
+  departmentId String?
+  order        Int      @default(0)
+  mode         StepMode @default(PARALLEL)
+  isMandatory  Boolean  @default(true)
+  slaHours     Int?
+  definition   WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  @@index([definitionId])
+  @@map("workflow_steps")
+}
+
+model ClearanceRequest {
+  id          String   @id @default(uuid())
+  studentId   String
+  semesterId  String
+  status      ClearanceStatus @default(PENDING)
+  remarks     String?
+  submittedAt DateTime @default(now())
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  semester    Semester @relation(fields: [semesterId], references: [id])
+  approvals   ClearanceApproval[]
+  examEligibilities ExamEligibility[]
+  @@unique([studentId, semesterId])
+  @@index([semesterId])
+  @@index([status])
+  @@index([studentId, status])
+  @@map("clearance_requests")
+}
+
+model ClearanceApproval {
+  id                 String   @id @default(uuid())
+  clearanceRequestId String
+  requiredRole       UserRole
+  departmentId       String?
+  officerId          String?
+  order              Int      @default(0)
+  status             ApprovalStatus @default(PENDING)
+  remarks            String?
+  approvedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  clearanceRequest   ClearanceRequest @relation(fields: [clearanceRequestId], references: [id], onDelete: Cascade)
+  officer            User?    @relation(fields: [officerId], references: [id])
+  department         Department? @relation(fields: [departmentId], references: [id])
+  @@index([clearanceRequestId])
+  @@index([officerId])
+  @@index([departmentId])
+  @@index([requiredRole, status])
+  @@map("clearance_approvals")
+}
+
+model ExamEligibility {
+  id                 String   @id @default(uuid())
+  studentId          String
+  clearanceRequestId String?
+  semesterId         String
+  status             ExamEligibilityStatus @default(PENDING_REVIEW)
+  verifiedById       String?
+  remarks            String?
+  verifiedAt         DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  student            Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  clearanceRequest   ClearanceRequest? @relation(fields: [clearanceRequestId], references: [id])
+  semester           Semester @relation(fields: [semesterId], references: [id])
+  verifiedBy         User?    @relation("ExamVerifier", fields: [verifiedById], references: [id])
+  @@unique([studentId, semesterId])
+  @@index([semesterId])
+  @@index([verifiedById])
+  @@index([status])
+  @@map("exam_eligibilities")
+}
+
+model Certificate {
+  id              String   @id @default(uuid())
+  certificateId   String   @unique
+  studentId       String
+  issuedById      String
+  certificateType CertificateType
+  title           String
+  description     String?
+  metadata        Json?
+  fileUrl         String?
+  qrCodeUrl       String?
+  signature       String?
+  isVerified      Boolean  @default(false)
+  issuedAt        DateTime @default(now())
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  student         Student  @relation(fields: [studentId], references: [id])
+  issuedBy        User     @relation("IssuedCertificates", fields: [issuedById], references: [id])
+  @@index([studentId])
+  @@index([issuedById])
+  @@map("certificates")
+}
+
+model QRCode {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  userId    String
+  data      Json?
+  purpose   String
+  signature String?
+  expiresAt DateTime?
+  isActive  Boolean  @default(true)
+  scannedAt DateTime?
+  scannedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([purpose])
+  @@map("qr_codes")
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  userId        String
+  sentById      String?
+  title         String
+  message       String
+  type          NotificationType @default(IN_APP)
+  priority      NotificationPriority @default(NORMAL)
+  referenceType String?
+  referenceId   String?
+  isRead        Boolean  @default(false)
+  readAt        DateTime?
+  sentAt        DateTime @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender        User?    @relation("SentNotifications", fields: [sentById], references: [id])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  familyId  String
+  userId    String
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  isRevoked Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
+}
+
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("password_resets")
+}
+
+model EmailVerification {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("email_verifications")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  action    AuditAction
+  entity    String
+  entityId  String?
+  oldValue  Json?
+  newValue  Json?
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model StudentHistory {
+  id             String   @id @default(uuid())
+  studentId      String
+  academicYearId String?
+  semesterId     String?
+  action         String
+  description    String?
+  performedById  String?
+  createdAt      DateTime @default(now())
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  @@index([studentId])
+  @@map("student_histories")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  group       String   @default("general")
+  type        String   @default("string")
+  isPublic    Boolean  @default(false)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("system_settings")
+}
+
+model BackupLog {
+  id          String   @id @default(uuid())
+  fileName    String
+  fileSize    Int?
+  fileUrl     String?
+  status      String
+  type        String
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  @@map("backup_logs")
+}
