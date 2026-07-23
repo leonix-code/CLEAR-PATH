@@ -22,7 +22,7 @@ async function main() {
     },
   });
 
-  // Create departments
+  // Create departments (note: headId is unique, so only one dept can have a head)
   const departments = await Promise.all([
     prisma.department.upsert({
       where: { code: 'CSC' },
@@ -32,27 +32,27 @@ async function main() {
     prisma.department.upsert({
       where: { code: 'ENG' },
       update: {},
-      create: { name: 'Engineering', code: 'ENG', description: 'Department of Engineering', headId: admin.id },
+      create: { name: 'Engineering', code: 'ENG', description: 'Department of Engineering' },
     }),
     prisma.department.upsert({
       where: { code: 'BUS' },
       update: {},
-      create: { name: 'Business Administration', code: 'BUS', description: 'Department of Business Administration', headId: admin.id },
+      create: { name: 'Business Administration', code: 'BUS', description: 'Department of Business Administration' },
     }),
     prisma.department.upsert({
       where: { code: 'SCI' },
       update: {},
-      create: { name: 'Sciences', code: 'SCI', description: 'Department of Sciences', headId: admin.id },
+      create: { name: 'Sciences', code: 'SCI', description: 'Department of Sciences' },
     }),
     prisma.department.upsert({
       where: { code: 'ART' },
       update: {},
-      create: { name: 'Arts and Humanities', code: 'ART', description: 'Department of Arts and Humanities', headId: admin.id },
+      create: { name: 'Arts and Humanities', code: 'ART', description: 'Department of Arts and Humanities' },
     }),
   ]);
 
   // Create courses
-  await Promise.all([
+  const courses = await Promise.all([
     prisma.course.upsert({ where: { code: 'CSC101' }, update: {}, create: { name: 'Computer Science', code: 'CSC101', departmentId: departments[0].id, duration: 4 } }),
     prisma.course.upsert({ where: { code: 'CSC201' }, update: {}, create: { name: 'Software Engineering', code: 'CSC201', departmentId: departments[0].id, duration: 4 } }),
     prisma.course.upsert({ where: { code: 'ENG101' }, update: {}, create: { name: 'Mechanical Engineering', code: 'ENG101', departmentId: departments[1].id, duration: 5 } }),
@@ -134,7 +134,7 @@ async function main() {
       userId: studentUser.id,
       studentId: 'CSC2021001',
       departmentId: departments[0].id,
-      courseId: 'CSC101',
+      courseId: courses[0].id,
       currentLevel: 300,
       yearOfEntry: 2021,
       cgpa: 3.5,

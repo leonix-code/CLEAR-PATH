@@ -20,13 +20,14 @@ import { QRModule } from './modules/qr/qr.module';
 import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { SemestersModule } from './modules/semesters/semesters.module';
 import { AcademicYearsModule } from './modules/academic-years/academic-years.module';
+import { AIModule } from './modules/ai/ai.module';
 import { HealthController } from './health.controller';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '.env',
+      envFilePath: ['.env.development.local', '.env.development', '.env.local', '.env'],
     }),
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -58,6 +59,7 @@ import { HealthController } from './health.controller';
     AuditLogsModule,
     SemestersModule,
     AcademicYearsModule,
+    AIModule,
   ],
   controllers: [HealthController],
   providers: [

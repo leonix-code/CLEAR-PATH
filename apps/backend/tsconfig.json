@@ -20,8 +20,7 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "paths": {
-      "@/*": ["src/*"],
-      "@prisma/*": ["prisma/*"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src/**/*", "prisma/**/*"],
