@@ -203,14 +203,14 @@ describe('AuthService', () => {
   describe('forgotPassword', () => {
     it('should send reset token for existing user', async () => {
       prisma.user.findUnique.mockResolvedValue(mockUser);
-      const result = await authService.forgotPassword('test@test.com');
+      const result = await authService.forgotPassword('test@test.com') as { message: string; resetToken: string };
       expect(result.message).toContain('reset link');
       expect(result.resetToken).toBeDefined();
     });
 
     it('should return same message for non-existent user (security)', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
-      const result = await authService.forgotPassword('no@test.com');
+      const result = await authService.forgotPassword('no@test.com') as { message: string; resetToken?: string };
       expect(result.message).toContain('reset link');
       expect(result.resetToken).toBeUndefined();
     });

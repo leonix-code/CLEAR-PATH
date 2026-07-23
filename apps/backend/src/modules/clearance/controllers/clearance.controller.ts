@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClearanceService } from '../services/clearance.service';
 import { JwtAuthGuard } from '../../../auth/guards/jwt-auth.guard';
+import { BadRequestException } from '@nestjs/common';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { GetUser } from '../../../common/decorators/get-user.decorator';
@@ -31,6 +32,7 @@ export class ClearanceController {
     @Body('semesterId') semesterId: string,
   ) {
     const student = await this.clearanceService['prisma'].student.findUnique({ where: { userId } });
+    if (!student) throw new (await import('@nestjs/common')).BadRequestException('Student profile not found');
     return this.clearanceService.create(student.id, semesterId);
   }
 

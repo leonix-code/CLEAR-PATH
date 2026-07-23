@@ -77,6 +77,19 @@ export class ReportsService {
     res.send(html);
   }
 
+  async exportPDF(res: Response, type: string, filters: any) {
+    const { data, columns, title } = await this.getExportData(type, filters);
+    let html = '<html><head><meta charset="utf-8"><title>' + title + '</title><style>body{font-family:sans-serif;padding:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f4f4f4}h1{color:#333}</style></head><body>';
+    html += '<h1>' + title + '</h1>';
+    html += '<p>Generated: ' + new Date().toISOString().split('T')[0] + '</p>';
+    html += '<table><thead><tr>' + columns.map(c => '<th>' + c.label + '</th>').join('') + '</tr></thead>';
+    html += '<tbody>' + data.map((row: any) => '<tr>' + columns.map(c => '<td>' + (row[c.key] || '') + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+    html += '</body></html>';
+    res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Content-Disposition', 'inline; filename="' + type + '-' + Date.now() + '.html"');
+    res.send(html);
+  }
+
   private async getExportData(type: string, filters: any) {
     const report = await this.getReportData({ type, ...filters });
     let columns: { key: string; label: string }[] = [];

@@ -1,6 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { ClearanceStatus, ApprovalStatus, CertificateType, AuditAction } from '@prisma/client';
+import { ClearanceStatus, ApprovalStatus, CertificateType, ExamEligibilityStatus, AuditAction } from '@prisma/client';
 import * as crypto from 'crypto';
 
 interface WorkflowStage {
@@ -22,6 +22,17 @@ const WORKFLOW_STAGES: WorkflowStage[] = [
 export class WorkflowEngineService {
   private readonly logger = new Logger(WorkflowEngineService.name);
   constructor(private readonly prisma: PrismaService) {}
+
+  async findById(id: string) {
+    return this.prisma.clearanceRequest.findUnique({
+      where: { id },
+      include: {
+        student: { include: { user: true, department: true, course: true } },
+        semester: true,
+        approvals: { include: { officer: { select: { firstName: true, lastName: true, role: true } } } },
+      },
+    });
+  }
 
   async createClearanceWithWorkflow(studentId: string, semesterId: string) {
     const existing = await this.prisma.clearanceRequest.findUnique({
@@ -193,7 +204,59 @@ export class WorkflowEngineService {
     if (!clearance) return;
 
     const certId = 'CERT-' + clearance.student.studentId + '-' + Date.now();
+    const studentName = clearance.student.user.firstName + ' ' + clearance.student.user.lastName;
     const qrData = JSON.stringify({
       certId,
       studentId: clearance.student.studentId,
-      studentName: cle
+      studentName,
+      department: clearance.student.department?.name || '',
+      course: clearance.student.course?.name || '',
+      semester: clearance.semester?.name || '',
+      issuedAt: new Date().toISOString(),
+    });
+    const signature = this.signData(qrData);
+
+    const certificate = await this.prisma.certificate.create({
+      data: {
+        certificateId: certId,
+        studentId: clearance.student.userId,
+        issuedById: clearance.student.userId,
+        certificateType: CertificateType.CLEARANCE,
+        title: 'Clearance Certificate',
+        description: `Official clearance certificate for ${studentName} - ${clearance.semester?.name || ''}`,
+        metadata: { qrData, signature, clearanceRequestId },
+        qrCodeUrl: signature,
+        isVerified: true,
+      },
+    });
+
+    await this.prisma.qRCode.create({
+      data: {
+        code: signature,
+        userId: clearance.student.userId,
+        data: JSON.parse(qrData),
+        purpose: 'clearance_certificate_verification',
+        isActive: true,
+      },
+    });
+
+    this.logger.log(`Clearance certificate generated: ${certId} for student ${clearance.student.studentId}`);
+    return certificate;
+  }
+
+  private async setExamEligibility(studentId: string, semesterId: string) {
+    await this.prisma.examEligibility.upsert({
+      where: { studentId_semesterId: { studentId, semesterId } },
+      update: {
+        status: ExamEligibilityStatus.ELIGIBLE,
+        verifiedAt: new Date(),
+      },
+      create: {
+        studentId,
+        semesterId,
+        status: ExamEligibilityStatus.ELIGIBLE,
+        verifiedAt: new Date(),
+      },
+    });
+  }
+}

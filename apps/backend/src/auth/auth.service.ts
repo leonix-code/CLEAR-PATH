@@ -340,7 +340,7 @@ export class AuthService {
           isActive: true,
           isVerified: true,
           authProvider: provider.toUpperCase() as any,
-          oauthId: profile.id,
+          providerId: profile.id,
         },
       });
     }
@@ -371,10 +371,7 @@ export class AuthService {
       data: {
         userId,
         token: refreshTokenValue,
-        type: 'REFRESH',
         expiresAt,
-        deviceInfo: userAgent,
-        ipAddress: ip,
       },
     });
 
@@ -386,13 +383,13 @@ export class AuthService {
     return safeUser;
   }
 
-  private async logAudit(userId: string | null, action: string, entityType: string, entityId: string | null, metadata?: any, details?: any, ip?: string, userAgent?: string) {
+  private async logAudit(userId: string | null, action: string, entity: string, entityId: string | null, metadata?: any, details?: any, ip?: string, userAgent?: string) {
     try {
       await this.prisma.auditLog.create({
         data: {
           userId: userId || undefined,
-          action,
-          entityType,
+          action: action as any,
+          entity,
           entityId: entityId || undefined,
           metadata: metadata || undefined,
           ipAddress: ip,

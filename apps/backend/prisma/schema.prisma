@@ -150,19 +150,22 @@ model User {
 
   // Relations
   student            Student?
-  parentRelation     ParentRelation?
-  children           ParentRelation[]  @relation("ParentChildren")
+  children           ParentRelation[]          @relation("ParentChildren")
+  departmentHeadOf   Department?               @relation("DepartmentHead")
   clearanceApprovals ClearanceApproval[]
   auditLogs          AuditLog[]
   notifications      Notification[]
-  sentNotifications  Notification[]    @relation("SentNotifications")
+  sentNotifications  Notification[]            @relation("SentNotifications")
   refreshTokens      RefreshToken[]
   deviceSessions     DeviceSession[]
   passwordResets     PasswordReset[]
   emailVerifications EmailVerification[]
   qrCodes            QRCode[]
-  certificates       Certificate[]
-  roleAssignments    RoleAssignment[]  @relation("AssignedByUser")
+  issuedCertificates Certificate[]             @relation("CertificateStudent")
+  heldCertificates   Certificate[]             @relation("CertificateIssuer")
+  roleAssignments    RoleAssignment[]          @relation("AssignedByUser")
+  assignedRoleAssignments RoleAssignment[]     @relation("AssignedToUser")
+  examVerifiedBy     ExamEligibility[]         @relation("ExamVerifier")
 
   @@map("users")
 }
@@ -175,8 +178,8 @@ model RoleAssignment {
   reason      String?
   assignedAt  DateTime @default(now())
 
-  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignedByUser User @relation("AssignedByUser", fields: [assignedBy], references: [id])
+  user            User @relation("AssignedToUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedByUser  User @relation("AssignedByUser", fields: [assignedBy], references: [id])
 
   @@map("role_assignments")
 }
@@ -303,6 +306,7 @@ model Student {
   clearanceRequests ClearanceRequest[]
   examEligibilities ExamEligibility[]
   studentHistories  StudentHistory[]
+  parentRelations   ParentRelation[]
 
   @@map("students")
 }
@@ -326,12 +330,12 @@ model Department {
   name        String          @unique
   code        String          @unique
   description String?
-  headId      String?
+  headId      String?    @unique
   isActive    Boolean         @default(true)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  head                    User?               @relation("DepartmentHead", fields: [headId], references: [id])
+  head                    User?               @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
   students                Student[]
   courses                 Course[]
   clearanceApprovals      ClearanceApproval[]
@@ -387,6 +391,7 @@ model Semester {
 
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
   clearanceRequests ClearanceRequest[]
+  examEligibilities  ExamEligibility[]
 
   @@unique([academicYearId, semesterType])
   @@map("semesters")
@@ -469,8 +474,8 @@ model Certificate {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  student  User @relation(fields: [studentId], references: [id])
-  issuedBy User @relation(fields: [issuedById], references: [id])
+  student  User @relation("CertificateStudent", fields: [studentId], references: [id])
+  issuedBy User @relation("CertificateIssuer", fields: [issuedById], references: [id])
 
   @@map("certificates")
 }

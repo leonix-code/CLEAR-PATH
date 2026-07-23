@@ -17,7 +17,7 @@ interface KnowledgeEntry {
   followUps?: string[];
 }
 
-interface SearchResult {
+export interface SearchResult {
   type: 'clearance' | 'student' | 'department' | 'certificate' | 'notification';
   id: string;
   title: string;
@@ -26,7 +26,7 @@ interface SearchResult {
   score: number;
 }
 
-interface Recommendation {
+export interface Recommendation {
   id: string;
   type: 'action' | 'insight' | 'alert' | 'suggestion';
   title: string;
@@ -331,19 +331,19 @@ export class AIService {
   async getRecommendations(userId: string): Promise<Recommendation[]> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        student: {
-          include: {
-            clearances: { orderBy: { createdAt: 'desc' }, take: 1 },
-          },
+    include: {
+      student: {
+        include: {
+          clearanceRequests: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       },
+    },
     });
 
     const recommendations: Recommendation[] = [];
 
     if (user?.role === 'STUDENT' && user.student) {
-      const latestClearance = user.student.clearances[0];
+      const latestClearance = (user.student as any).clearanceRequests?.[0];
 
       if (!latestClearance) {
         recommendations.push({
@@ -633,7 +633,7 @@ export class AIService {
     const student = await this.prisma.student.findUnique({
       where: { userId },
       include: {
-        clearances: {
+        clearanceRequests: {
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: {
@@ -643,7 +643,7 @@ export class AIService {
       },
     });
 
-    if (!student || student.clearances.length === 0) {
+    if (!student || (student as any).clearanceRequests?.length === 0) {
       return {
         reply: 'You haven\'t submitted any clearance requests yet. Would you like to submit one now? You can do so from your Student Dashboard.',
         intent: 'status',
@@ -652,8 +652,8 @@ export class AIService {
       };
     }
 
-    const clearance = student.clearances[0];
-    const approvedCount = clearance.approvals.filter(a => a.status === 'APPROVED').length;
+    const clearance = (student as any).clearanceRequests[0];
+    const approvedCount = clearance.approvals.filter((a: any) => a.status === 'APPROVED').length;
     const totalStages = clearance.approvals.length;
     const progress = Math.round((approvedCount / totalStages) * 100);
 
@@ -777,7 +777,7 @@ export class AIService {
       include: {
         students: {
           include: {
-            clearances: {
+            clearanceRequests: {
               where: { status: 'APPROVED' },
               select: { id: true },
             },
@@ -790,10 +790,10 @@ export class AIService {
       name: d.name,
       code: d.code,
       totalStudents: d.students.length,
-      clearedStudents: d.students.filter(s => s.clearances.length > 0).length,
-      pendingStudents: d.students.length - d.students.filter(s => s.clearances.length > 0).length,
+      clearedStudents: d.students.filter((s: any) => s.clearanceRequests?.length > 0).length,
+      pendingStudents: d.students.length - d.students.filter((s: any) => s.clearanceRequests?.length > 0).length,
       clearanceRate: d.students.length > 0
-        ? Math.round((d.students.filter(s => s.clearances.length > 0).length / d.students.length) * 100)
+        ? Math.round((d.students.filter((s: any) => s.clearanceRequests?.length > 0).length / d.students.length) * 100)
         : 0,
     }));
   }
@@ -805,7 +805,7 @@ export class AIService {
     for (const stage of stages) {
       const pendingCount = await this.prisma.clearanceApproval.count({
         where: {
-          officer: { role: stage },
+          officer: { role: stage as any },
           status: 'PENDING',
         },
       });
@@ -826,7 +826,7 @@ export class AIService {
   private async getAvgProcessingTime(role: string): Promise<number> {
     const approvals = await this.prisma.clearanceApproval.findMany({
       where: {
-        officer: { role },
+        officer: { role: role as any },
         status: { in: ['APPROVED', 'REJECTED'] },
         approvedAt: { not: null },
       },

@@ -2,9 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger, VersioningType } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
-import * as helmet from 'helmet';
-import * as compression from 'compression';
-import * as cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -13,9 +13,13 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Security middleware
-  app.use(helmet());
-  app.use(compression());
-  app.use(cookieParser());
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const helmetFn = typeof helmet === 'function' ? helmet : require('helmet');
+  const compressionFn = typeof compression === 'function' ? compression : require('compression');
+  const cookieParserFn = typeof cookieParser === 'function' ? cookieParser : require('cookie-parser');
+  app.use(helmetFn());
+  app.use(compressionFn());
+  app.use(cookieParserFn());
 
   // CORS
   app.enableCors({
